@@ -84,6 +84,15 @@
             border-radius: 20px;
         }
 
+        .user-marker {
+            z-index: 1000 !important;
+        }
+
+        #gpsButton:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
         .forecast-card:hover {
             transform: translateY(-10px) scale(1.05);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
@@ -288,18 +297,24 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
                 <!-- Mapa OpenStreetMap -->
                 <div class="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 glow">
-                    <div class="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-green-500/20 flex items-center justify-center">
-                            <i class="fas fa-map text-green-400 text-sm sm:text-base"></i>
+                    <div class="flex items-center justify-between mb-3 sm:mb-4">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-green-500/20 flex items-center justify-center">
+                                <i class="fas fa-map text-green-400 text-sm sm:text-base"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-white font-semibold text-base sm:text-lg">Mapa Interactivo</h3>
+                                <p id="mapLocationText" class="text-white/50 text-xs sm:text-sm">OpenStreetMap - Córdoba, Argentina</p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 class="text-white font-semibold text-base sm:text-lg">Mapa Interactivo</h3>
-                            <p class="text-white/50 text-xs sm:text-sm">OpenStreetMap - Córdoba, Argentina</p>
-                        </div>
+                        <button id="gpsButton" onclick="getGPSLocation()" class="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 text-xs sm:text-sm font-medium transition-all duration-300 border border-blue-500/30">
+                            <i class="fas fa-location-crosshairs"></i>
+                            <span class="hidden sm:inline">GPS</span>
+                        </button>
                     </div>
                     <div id="map" class="w-full h-56 sm:h-80 rounded-xl sm:rounded-2xl overflow-hidden z-0"></div>
                     <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 mt-3 sm:mt-4 text-white/50 text-xs sm:text-sm">
-                        <span><i class="fas fa-location-dot text-red-400 mr-1"></i>-31.4201, -64.1888</span>
+                        <span id="mapCoords"><i class="fas fa-location-dot text-red-400 mr-1"></i>-31.4201, -64.1888</span>
                         <span class="flex items-center gap-1">
                             <img src="https://openstreetmap.org/favicon.ico" class="w-3 h-3 sm:w-4 sm:h-4"> OpenStreetMap
                         </span>
@@ -386,6 +401,10 @@
         let apiKey = 'c323906192d854be0d76df275c847469';
         let map = null;
         let marker = null;
+        let userMarker = null;
+        let currentLat = CORDOBA_LAT;
+        let currentLon = CORDOBA_LON;
+        let isUsingGPS = false;
 
         // ============================================
         // INICIALIZACIÓN
@@ -393,6 +412,38 @@
         document.addEventListener('DOMContentLoaded', () => {
             updateCurrentDate();
             loadWeatherData();
+            
+            // Intentar obtener ubicación GPS automáticamente al cargar
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lon = position.coords.longitude;
+                        const accuracy = position.coords.accuracy;
+                        
+                        currentLat = lat;
+                        currentLon = lon;
+                        isUsingGPS = true;
+                        
+                        // Actualizar UI con la ubicación GPS
+                        document.getElementById('mapLocationText').textContent = 
+                            `Mi ubicación GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)} (±${Math.round(accuracy)}m)`;
+                        document.getElementById('mapCoords').innerHTML = 
+                            `<i class="fas fa-location-crosshairs text-blue-400 mr-1"></i>${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+                        
+                        // El mapa se actualizará cuando initMap() sea llamado
+                    },
+                    (error) => {
+                        // Silenciosamente fallar - el usuario puede presionar el botón GPS manualmente
+                        console.log('GPS automático no disponible:', error.message);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 5000,
+                        maximumAge: 60000
+                    }
+                );
+            }
         });
 
         function saveApiKey() {
@@ -616,6 +667,124 @@
         }
 
         // ============================================
+        // GPS - GEOLOCALIZACIÓN
+        // ============================================
+        function getGPSLocation() {
+            const btn = document.getElementById('gpsButton');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span class="hidden sm:inline">Buscando...</span>';
+            btn.disabled = true;
+
+            if (!navigator.geolocation) {
+                showNotification('Tu navegador no soporta geolocalización', 'error');
+                resetGPSButton();
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+
+                    currentLat = lat;
+                    currentLon = lon;
+                    isUsingGPS = true;
+
+                    // Actualizar mapa con la ubicación del GPS
+                    updateMapWithGPS(lat, lon, accuracy);
+                    
+                    // Actualizar texto de ubicación
+                    document.getElementById('mapLocationText').textContent = 
+                        `Mi ubicación GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)} (±${Math.round(accuracy)}m)`;
+                    document.getElementById('mapCoords').innerHTML = 
+                        `<i class="fas fa-location-crosshairs text-blue-400 mr-1"></i>${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+                    
+                    showNotification(`Ubicación GPS obtenida con precisión de ${Math.round(accuracy)} metros`, 'success');
+                    resetGPSButton();
+                },
+                (error) => {
+                    let message = 'Error al obtener la ubicación';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            message = 'Permiso de ubicación denegado. Activa el GPS en tu dispositivo.';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            message = 'Información de ubicación no disponible';
+                            break;
+                        case error.TIMEOUT:
+                            message = 'Tiempo de espera agotado al obtener ubicación';
+                            break;
+                    }
+                    showNotification(message, 'error');
+                    resetGPSButton();
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        }
+
+        function resetGPSButton() {
+            const btn = document.getElementById('gpsButton');
+            btn.innerHTML = '<i class="fas fa-location-crosshairs"></i><span class="hidden sm:inline">GPS</span>';
+            btn.disabled = false;
+        }
+
+        function updateMapWithGPS(lat, lon, accuracy) {
+            if (!map) return;
+
+            // Centrar mapa en la ubicación del GPS
+            map.setView([lat, lon], 15);
+
+            // Eliminar marcador de usuario anterior si existe
+            if (userMarker) {
+                map.removeLayer(userMarker);
+                if (userMarker.accuracyCircle) {
+                    map.removeLayer(userMarker.accuracyCircle);
+                }
+            }
+
+            // Crear icono para la ubicación del usuario
+            const userIcon = L.divIcon({
+                className: 'user-marker',
+                html: `<div style="
+                    width: 24px; height: 24px;
+                    background: #3b82f6;
+                    border-radius: 50%;
+                    border: 3px solid white;
+                    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 4px 15px rgba(0,0,0,0.3);
+                "></div>`,
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+
+            // Agregar marcador de la ubicación del usuario
+            userMarker = L.marker([lat, lon], { icon: userIcon }).addTo(map);
+            userMarker.bindPopup(`
+                <div style="text-align: center; padding: 8px;">
+                    <strong style="font-size: 16px; color: #3b82f6;"><i class="fas fa-location-crosshairs"></i> Mi Ubicación</strong><br>
+                    <span style="font-size: 12px; color: #666;">Lat: ${lat.toFixed(6)}</span><br>
+                    <span style="font-size: 12px; color: #666;">Lon: ${lon.toFixed(6)}</span><br>
+                    <span style="font-size: 11px; color: #999;">Precisión: ±${Math.round(accuracy)}m</span>
+                </div>
+            `).openPopup();
+
+            // Agregar círculo de precisión
+            const accuracyCircle = L.circle([lat, lon], {
+                radius: accuracy,
+                color: '#3b82f6',
+                fillColor: '#3b82f6',
+                fillOpacity: 0.15,
+                weight: 1
+            }).addTo(map);
+
+            // Guardar referencia al círculo para poder eliminarlo después
+            userMarker.accuracyCircle = accuracyCircle;
+        }
+
+        // ============================================
         // MAPA OpenStreetMap
         // ============================================
         function initMap() {
@@ -624,7 +793,7 @@
             }
 
             map = L.map('map', {
-                center: [CORDOBA_LAT, CORDOBA_LON],
+                center: [currentLat, currentLon],
                 zoom: 12,
                 zoomControl: true,
             });
@@ -661,11 +830,19 @@
             const desc = document.getElementById('weatherDescription').textContent;
             marker.bindPopup(`
                 <div style="text-align: center; padding: 8px;">
-                    <strong style="font-size: 18px;">Córdoba, Argentina</strong><br>
+                    <strong style="font-size: 18px; color: #667eea;"><i class="fas fa-cloud-sun"></i> Córdoba, Argentina</strong><br>
                     <span style="font-size: 24px; font-weight: bold; color: #667eea;">${temp}°C</span><br>
                     <span style="color: #666; text-transform: capitalize;">${desc}</span>
                 </div>
-            `).openPopup();
+            `);
+
+            // Línea conectando Córdoba con la ubicación del usuario (si está disponible)
+            if (isUsingGPS && currentLat !== CORDOBA_LAT && currentLon !== CORDOBA_LON) {
+                const line = L.polyline(
+                    [[CORDOBA_LAT, CORDOBA_LON], [currentLat, currentLon]],
+                    { color: '#3b82f6', weight: 2, opacity: 0.6, dashArray: '10, 10' }
+                ).addTo(map);
+            }
 
             // Capa de nubes (OpenWeatherMap overlay)
             if (apiKey) {
@@ -674,6 +851,32 @@
                     opacity: 0.5,
                     maxZoom: 19
                 }).addTo(map);
+            }
+
+            // Si tenemos ubicación GPS, mostrar el marcador del usuario
+            if (isUsingGPS && currentLat !== CORDOBA_LAT && currentLon !== CORDOBA_LON) {
+                // Crear icono para la ubicación del usuario
+                const userIcon = L.divIcon({
+                    className: 'user-marker',
+                    html: `<div style="
+                        width: 24px; height: 24px;
+                        background: #3b82f6;
+                        border-radius: 50%;
+                        border: 3px solid white;
+                        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.3), 0 4px 15px rgba(0,0,0,0.3);
+                    "></div>`,
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+
+                userMarker = L.marker([currentLat, currentLon], { icon: userIcon }).addTo(map);
+                userMarker.bindPopup(`
+                    <div style="text-align: center; padding: 8px;">
+                        <strong style="font-size: 16px; color: #3b82f6;"><i class="fas fa-location-crosshairs"></i> Mi Ubicación</strong><br>
+                        <span style="font-size: 12px; color: #666;">Lat: ${currentLat.toFixed(6)}</span><br>
+                        <span style="font-size: 12px; color: #666;">Lon: ${currentLon.toFixed(6)}</span>
+                    </div>
+                `).openPopup();
             }
 
             // Forzar redibujado del mapa
