@@ -93,6 +93,29 @@
             cursor: not-allowed;
         }
 
+        /* Radar map container - Aspect ratio 9:16 en móvil */
+        #radarMapContainer {
+            position: relative;
+            width: 100%;
+        }
+
+        @media (min-width: 640px) {
+            #radarMapContainer {
+                padding-bottom: 0 !important;
+                height: 320px;
+            }
+            #radarMap {
+                position: relative !important;
+                border-radius: 1rem;
+            }
+        }
+
+        @media (min-width: 1024px) {
+            #radarMapContainer {
+                height: 400px;
+            }
+        }
+
         .forecast-card:hover {
             transform: translateY(-10px) scale(1.05);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
@@ -372,15 +395,15 @@
             </div>
 
             <!-- Radar meteorológico -->
-            <div class="glass rounded-2xl sm:rounded-3xl p-3 sm:p-6 mb-6 sm:mb-8 glow">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-6">
+            <div class="glass rounded-none sm:rounded-3xl p-0 sm:p-6 mb-6 sm:mb-8 glow mx-0 sm:mx-0">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-6 p-3 sm:p-0">
                     <div class="flex items-center gap-2 sm:gap-3">
                         <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-red-500/20 flex items-center justify-center">
                             <i class="fas fa-satellite-dish text-red-400 text-sm sm:text-base animate-pulse"></i>
                         </div>
                         <div>
                             <h3 class="text-white font-semibold text-sm sm:text-lg">Radar Meteorológico</h3>
-                            <p class="text-white/50 text-[10px] sm:text-sm">Precipitación en tiempo real - <a href="https://rainviewer.com" target="_blank" class="text-red-400 hover:underline">RainViewer</a></p>
+                            <p class="text-white/50 text-[10px] sm:text-sm">Actualización cada 30 min - <a href="https://rainviewer.com" target="_blank" class="text-red-400 hover:underline">RainViewer</a></p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2 sm:gap-3">
@@ -400,7 +423,7 @@
                 </div>
                 
                 <!-- Controles del radar -->
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 mb-3 sm:mb-4 text-white/60 text-[10px] sm:text-sm">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 mb-0 sm:mb-4 text-white/60 text-[10px] sm:text-sm px-3 sm:px-0 pb-3 sm:pb-0">
                     <div class="flex items-center gap-2">
                         <i class="fas fa-clock text-red-400"></i>
                         <span id="radarTimestamp">Cargando...</span>
@@ -412,18 +435,20 @@
                     </div>
                 </div>
 
-                <!-- Mapa del radar -->
-                <div id="radarMap" class="w-full h-48 sm:h-64 lg:h-80 rounded-xl sm:rounded-2xl overflow-hidden relative bg-black/20">
-                    <div id="radarLoading" class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl sm:rounded-2xl z-10">
-                        <div class="text-center">
-                            <div class="loading-spinner mb-2 sm:mb-3"></div>
-                            <p class="text-white/70 text-[10px] sm:text-sm">Cargando radar...</p>
+                <!-- Mapa del radar - Full width en móvil con aspect ratio 9:16 -->
+                <div class="relative w-full" style="padding-bottom: 177.78%;" id="radarMapContainer">
+                    <div id="radarMap" class="absolute inset-0 w-full h-full sm:relative sm:rounded-2xl overflow-hidden bg-black/20">
+                        <div id="radarLoading" class="absolute inset-0 flex items-center justify-center bg-black/50 sm:rounded-2xl z-10">
+                            <div class="text-center">
+                                <div class="loading-spinner mb-2 sm:mb-3"></div>
+                                <p class="text-white/70 text-[10px] sm:text-sm">Cargando radar...</p>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Leyenda -->
-                <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mt-3 sm:mt-4 text-[10px] sm:text-xs">
+                <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mt-3 sm:mt-4 text-[10px] sm:text-xs px-3 sm:px-0">
                     <div class="flex items-center gap-1">
                         <div class="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-blue-300"></div>
                         <span class="text-white/60 hidden sm:inline">Lluvia ligera</span>
@@ -495,7 +520,8 @@
         let radarLayerCache = {};
         let radarTileSize = window.devicePixelRatio >= 2 ? 512 : 256;
         let radarOpacity = 0.8;
-        let radarAnimationDelay = 1500; // Cambiado a 1500ms para progresión más lenta (cada ~30 minutos de datos)
+        let radarAnimationDelay = 2000; // 2 segundos entre frames para mostrar cada 30 minutos de datos
+        let isRadarPlaying = false;
         let radarApiUrl = "https://api.rainviewer.com/public/weather-maps.json";
         
         // Límites geográficos de Argentina para restringir el mapa
@@ -1053,6 +1079,13 @@
 
             // Cargar datos del radar
             loadRadarData();
+            
+            // Forzar redibujado después de que el contenedor esté listo
+            setTimeout(() => {
+                if (radarMap) {
+                    radarMap.invalidateSize();
+                }
+            }, 100);
         }
 
         function loadRadarData() {
@@ -1099,7 +1132,33 @@
                 return;
             }
 
-            radarFrames = radarApiData.radar.past;
+            // Filtrar frames para mostrar uno cada 30 minutos (1800 segundos)
+            // RainViewer suele tener datos cada 10 minutos, así que tomamos cada 3er frame
+            const allFrames = radarApiData.radar.past;
+            radarFrames = [];
+            
+            if (allFrames.length > 0) {
+                // Siempre incluir el primer frame
+                radarFrames.push(allFrames[0]);
+                
+                let lastSelectedTime = allFrames[0].time;
+                
+                for (let i = 1; i < allFrames.length; i++) {
+                    const timeDiff = allFrames[i].time - lastSelectedTime;
+                    // Seleccionar frame si han pasado al menos 25 minutos (1500 segundos)
+                    // para aproximarnos a 30 minutos entre frames
+                    if (timeDiff >= 1500) {
+                        radarFrames.push(allFrames[i]);
+                        lastSelectedTime = allFrames[i].time;
+                    }
+                }
+                
+                // Asegurar que el último frame siempre esté incluido (más reciente)
+                if (radarFrames[radarFrames.length - 1] !== allFrames[allFrames.length - 1]) {
+                    radarFrames.push(allFrames[allFrames.length - 1]);
+                }
+            }
+            
             showRadarFrame(radarFrames.length - 1);
             
             // Ocultar loading
@@ -1116,7 +1175,14 @@
         }
 
         function clearRadarLayerCache() {
-            stopRadarAnimation();
+            // Detener animación sin cambiar el estado del botón
+            isRadarPlaying = false;
+            if (radarAnimationTimer) {
+                clearTimeout(radarAnimationTimer);
+                radarAnimationTimer = null;
+            }
+            document.getElementById("radarPlayBtn").innerHTML = '<i class="fas fa-play text-xs sm:text-sm"></i>';
+            
             for (var pos in radarLayerCache) {
                 if (parseInt(pos) !== radarAnimationPosition) {
                     radarMap.removeLayer(radarLayerCache[pos]);
@@ -1136,14 +1202,23 @@
         }
 
         function formatRadarTime(timestamp) {
-            return new Date(timestamp * 1000).toLocaleTimeString('es-AR', { 
+            const date = new Date(timestamp * 1000);
+            const timeStr = date.toLocaleTimeString('es-AR', { 
                 hour: '2-digit', 
                 minute: '2-digit' 
             });
+            const dateStr = date.toLocaleDateString('es-AR', { 
+                weekday: 'short', 
+                day: 'numeric',
+                month: 'short'
+            });
+            return { time: timeStr, date: dateStr, fullDate: date };
         }
 
         function updateRadarTimestamp(frame) {
-            document.getElementById('radarTimestamp').textContent = formatRadarTime(frame.time);
+            const formatted = formatRadarTime(frame.time);
+            document.getElementById('radarTimestamp').innerHTML = 
+                `<span class="text-white font-semibold">${formatted.time}</span> <span class="text-white/60">- ${formatted.date}</span>`;
         }
 
         function showRadarFrame(position) {
@@ -1164,7 +1239,7 @@
                 radarCurrentLayer = radarLayerCache[position];
                 radarAnimationPosition = position;
 
-                if (radarAnimationTimer) {
+                if (isRadarPlaying) {
                     radarAnimationTimer = setTimeout(playRadarAnimation, radarAnimationDelay);
                 }
                 return;
@@ -1184,7 +1259,7 @@
                 radarAnimationPosition = position;
                 radarIsLoading = false;
 
-                if (radarAnimationTimer) {
+                if (isRadarPlaying) {
                     radarAnimationTimer = setTimeout(playRadarAnimation, radarAnimationDelay);
                 }
             });
@@ -1193,9 +1268,12 @@
         }
 
         function stopRadarAnimation() {
-            if (radarAnimationTimer) {
-                clearTimeout(radarAnimationTimer);
-                radarAnimationTimer = false;
+            if (isRadarPlaying) {
+                isRadarPlaying = false;
+                if (radarAnimationTimer) {
+                    clearTimeout(radarAnimationTimer);
+                    radarAnimationTimer = null;
+                }
                 document.getElementById("radarPlayBtn").innerHTML = '<i class="fas fa-play text-xs sm:text-sm"></i>';
                 return true;
             }
@@ -1203,13 +1281,15 @@
         }
 
         function playRadarAnimation() {
-            radarAnimationTimer = true;
+            isRadarPlaying = true;
             document.getElementById("radarPlayBtn").innerHTML = '<i class="fas fa-pause text-xs sm:text-sm"></i>';
             showRadarFrame(radarAnimationPosition + 1);
         }
 
         function toggleRadarAnimation() {
-            if (!stopRadarAnimation()) {
+            if (isRadarPlaying) {
+                stopRadarAnimation();
+            } else {
                 playRadarAnimation();
             }
         }
