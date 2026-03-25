@@ -403,7 +403,7 @@
                         </div>
                         <div>
                             <h3 class="text-white font-semibold text-sm sm:text-lg">Radar Meteorológico</h3>
-                            <p class="text-white/50 text-[10px] sm:text-sm">Actualización cada 30 min - <a href="https://rainviewer.com" target="_blank" class="text-red-400 hover:underline">RainViewer</a></p>
+                            <p class="text-white/50 text-[10px] sm:text-sm">Radar + Pronóstico 3 días - <a href="https://rainviewer.com" target="_blank" class="text-red-400 hover:underline">RainViewer</a> & <a href="https://openweathermap.org" target="_blank" class="text-yellow-400 hover:underline">OpenWeather</a></p>
                         </div>
                     </div>
                     <div class="flex items-center gap-2 sm:gap-3">
@@ -424,14 +424,27 @@
                 
                 <!-- Controles del radar -->
                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 mb-0 sm:mb-4 text-white/60 text-[10px] sm:text-sm px-3 sm:px-0 pb-3 sm:pb-0">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                         <i class="fas fa-clock text-red-400"></i>
                         <span id="radarTimestamp">Cargando...</span>
+                        <span id="radarTypeIndicator" class="px-2 py-0.5 rounded-full bg-gray-500/30 text-gray-300 text-[9px] sm:text-xs font-medium">Histórico</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <i class="fas fa-tint text-blue-400"></i>
                         <span class="hidden sm:inline">Intensidad de precipitación</span>
                         <span class="sm:hidden">Precipitación</span>
+                    </div>
+                </div>
+
+                <!-- Barra de progreso -->
+                <div class="px-3 sm:px-0 py-2 sm:py-3">
+                    <div class="w-full h-1.5 sm:h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div id="radarProgressBar" class="h-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-500 ease-out" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between text-[9px] sm:text-xs text-white/40 mt-1">
+                        <span>Inicio</span>
+                        <span id="radarProgressText">0%</span>
+                        <span>3 días</span>
                     </div>
                 </div>
 
@@ -523,6 +536,9 @@
         let radarAnimationDelay = 2000; // 2 segundos entre frames para mostrar cada 30 minutos de datos
         let isRadarPlaying = false;
         let radarApiUrl = "https://api.rainviewer.com/public/weather-maps.json";
+        let radarPastEndIndex = 0; // Índice donde terminan los datos históricos y empieza el pronóstico
+        let openWeatherForecastFrames = []; // Frames de pronóstico de OpenWeatherMap
+        let useOpenWeatherForecast = true; // Usar OpenWeatherMap para pronóstico extendido
         
         // Límites geográficos de Argentina para restringir el mapa
         const ARGENTINA_BOUNDS = [
@@ -1089,12 +1105,15 @@
         }
 
         function loadRadarData() {
+            // Cargar datos de RainViewer
             const apiRequest = new XMLHttpRequest();
             apiRequest.open("GET", radarApiUrl, true);
             apiRequest.onload = function() {
                 try {
                     radarApiData = JSON.parse(apiRequest.response);
-                    initializeRadar();
+                    
+                    // Cargar pronóstico de OpenWeatherMap para tener datos de 3 días
+                    loadOpenWeatherForecast();
                 } catch (error) {
                     console.error('Error al cargar datos del radar:', error);
                     document.getElementById('radarLoading').innerHTML = `
@@ -1116,6 +1135,56 @@
             apiRequest.send();
         }
 
+        // Cargar pronóstico de precipitación de OpenWeatherMap
+        async function loadOpenWeatherForecast() {
+            try {
+                // Obtener pronóstico de 5 días/3 horas de OpenWeatherMap
+                const forecastRes = await fetch(
+                    `https://api.openweathermap.org/data/2.5/forecast?lat=${currentLat}&lon=${currentLon}&units=metric&lang=es&appid=${apiKey}`
+                );
+                
+                if (forecastRes.ok) {
+                    const forecastData = await forecastRes.json();
+                    
+                    // Crear frames de pronóstico basados en los datos de OpenWeatherMap
+                    // Usamos el campo 'pop' (probability of precipitation) para determinar la intensidad
+                    openWeatherForecastFrames = [];
+                    
+                    if (forecastData && forecastData.list) {
+                        const now = Math.floor(Date.now() / 1000);
+                        
+                        forecastData.list.forEach((item, index) => {
+                            // Solo incluir pronóstico futuro (no datos pasados)
+                            if (item.dt > now) {
+                                // Calcular intensidad basada en pop y volumen de lluvia si está disponible
+                                let intensity = item.pop || 0;
+                                if (item.rain && item.rain['3h']) {
+                                    // Ajustar intensidad basada en volumen de lluvia
+                                    intensity = Math.min(1, intensity + (item.rain['3h'] / 10));
+                                }
+                                
+                                openWeatherForecastFrames.push({
+                                    time: item.dt,
+                                    pop: item.pop || 0,
+                                    rain: item.rain ? item.rain['3h'] || 0 : 0,
+                                    description: item.weather[0] ? item.weather[0].description : '',
+                                    icon: item.weather[0] ? item.weather[0].icon : '',
+                                    intensity: intensity,
+                                    isOpenWeather: true
+                                });
+                            }
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error al cargar pronóstico de OpenWeatherMap:', error);
+                openWeatherForecastFrames = [];
+            }
+            
+            // Inicializar el radar con todos los datos
+            initializeRadar();
+        }
+
         function initializeRadar() {
             clearRadarLayerCache();
             radarCurrentLayer = null;
@@ -1132,40 +1201,128 @@
                 return;
             }
 
-            // Filtrar frames para mostrar uno cada 30 minutos (1800 segundos)
-            // RainViewer suele tener datos cada 10 minutos, así que tomamos cada 3er frame
-            const allFrames = radarApiData.radar.past;
+            // Combinar datos pasados (past) y pronóstico (nowcast) de RainViewer
+            const pastFrames = radarApiData.radar.past || [];
+            const forecastFrames = radarApiData.radar.nowcast || [];
+            
+            // Combinar todos los frames de RainViewer
+            const allFrames = [...pastFrames, ...forecastFrames];
             radarFrames = [];
             
+            // Encontrar el timestamp del último frame histórico
+            const lastPastTime = pastFrames.length > 0 ? pastFrames[pastFrames.length - 1].time : 0;
+            
             if (allFrames.length > 0) {
-                // Siempre incluir el primer frame
+                // Filtrar frames para mostrar uno cada 30 minutos (1800 segundos)
                 radarFrames.push(allFrames[0]);
                 
                 let lastSelectedTime = allFrames[0].time;
                 
                 for (let i = 1; i < allFrames.length; i++) {
                     const timeDiff = allFrames[i].time - lastSelectedTime;
-                    // Seleccionar frame si han pasado al menos 25 minutos (1500 segundos)
-                    // para aproximarnos a 30 minutos entre frames
                     if (timeDiff >= 1500) {
                         radarFrames.push(allFrames[i]);
                         lastSelectedTime = allFrames[i].time;
                     }
                 }
                 
-                // Asegurar que el último frame siempre esté incluido (más reciente)
+                // Asegurar que el último frame de RainViewer esté incluido
                 if (radarFrames[radarFrames.length - 1] !== allFrames[allFrames.length - 1]) {
                     radarFrames.push(allFrames[allFrames.length - 1]);
                 }
             }
             
-            showRadarFrame(radarFrames.length - 1);
+            // Calcular el índice donde terminan los datos históricos de RainViewer
+            radarPastEndIndex = radarFrames.findIndex(f => f.time > lastPastTime);
+            if (radarPastEndIndex === -1) {
+                radarPastEndIndex = radarFrames.length;
+            }
+            
+            // Agregar pronóstico extendido de OpenWeatherMap (hasta 3 días)
+            if (openWeatherForecastFrames.length > 0 && useOpenWeatherForecast) {
+                const lastRainViewerTime = radarFrames.length > 0 ? 
+                    radarFrames[radarFrames.length - 1].time : 0;
+                
+                // Filtrar frames de OpenWeather que sean posteriores al último de RainViewer
+                // y limitar a 3 días (259200 segundos) desde ahora
+                const now = Math.floor(Date.now() / 1000);
+                const threeDaysLater = now + (3 * 24 * 60 * 60);
+                
+                let lastSelectedTime = lastRainViewerTime > 0 ? lastRainViewerTime : now;
+                
+                for (const frame of openWeatherForecastFrames) {
+                    // Solo agregar si es posterior al último de RainViewer y dentro de 3 días
+                    if (frame.time > lastRainViewerTime && frame.time <= threeDaysLater) {
+                        const timeDiff = frame.time - lastSelectedTime;
+                        // Mostrar cada 3 horas (10800 segundos) para el pronóstico extendido
+                        if (timeDiff >= 10800) {
+                            radarFrames.push(frame);
+                            lastSelectedTime = frame.time;
+                        }
+                    }
+                }
+            }
+            
+            // Mostrar el frame actual (último de datos pasados) o el primero si no hay datos
+            const initialPosition = pastFrames.length > 0 ? 
+                Math.max(0, radarFrames.findIndex(f => f.time >= lastPastTime)) : 0;
+            showRadarFrame(Math.max(0, initialPosition));
             
             // Ocultar loading
             document.getElementById('radarLoading').classList.add('hidden');
         }
 
         function createRadarLayer(frame) {
+            // Si es un frame de OpenWeatherMap, usar capa de precipitación de OpenWeatherMap
+            if (frame.isOpenWeather) {
+                // Crear un grupo de capas para OpenWeather
+                const layerGroup = L.layerGroup();
+                
+                // Agregar capa base de precipitación de OpenWeatherMap
+                const precipLayer = L.tileLayer(
+                    `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`,
+                    {
+                        tileSize: 256,
+                        opacity: 0.001, // Inicialmente transparente
+                        maxNativeZoom: 7,
+                        maxZoom: 12,
+                        attribution: '© OpenWeatherMap'
+                    }
+                );
+                
+                layerGroup.addLayer(precipLayer);
+                
+                // Agregar marcador con información del pronóstico
+                if (frame.pop > 0.3) { // Solo mostrar si hay probabilidad significativa
+                    const center = isUsingGPS ? [currentLat, currentLon] : [CORDOBA_LAT, CORDOBA_LON];
+                    const intensity = frame.intensity || frame.pop;
+                    const color = intensity > 0.7 ? '#ef4444' : intensity > 0.4 ? '#f59e0b' : '#3b82f6';
+                    
+                    const circle = L.circleMarker(center, {
+                        radius: 20 + (intensity * 30),
+                        fillColor: color,
+                        color: '#fff',
+                        weight: 2,
+                        opacity: 0.001,
+                        fillOpacity: 0.001
+                    });
+                    
+                    layerGroup.addLayer(circle);
+                }
+                
+                // Simular el evento 'load' para compatibilidad
+                setTimeout(() => {
+                    if (layerGroup.eachLayer) {
+                        layerGroup.eachLayer(layer => {
+                            if (layer.setOpacity) layer.setOpacity(radarOpacity);
+                        });
+                    }
+                }, 500);
+                
+                return layerGroup;
+            }
+            
+            // Frame de RainViewer - usar tiles normales
             return new L.TileLayer(radarApiData.host + frame.path + '/' + radarTileSize + '/{z}/{x}/{y}/2/1_1.png', {
                 tileSize: 256,
                 opacity: 0.001,
@@ -1217,8 +1374,45 @@
 
         function updateRadarTimestamp(frame) {
             const formatted = formatRadarTime(frame.time);
+            const frameIndex = radarFrames.indexOf(frame);
+            
+            // Determinar el tipo de frame
+            let isForecast = false;
+            let isExtendedForecast = false;
+            
+            if (frame.isOpenWeather) {
+                isExtendedForecast = true;
+                isForecast = true;
+            } else if (frameIndex >= radarPastEndIndex && radarPastEndIndex > 0) {
+                isForecast = true;
+            }
+            
             document.getElementById('radarTimestamp').innerHTML = 
                 `<span class="text-white font-semibold">${formatted.time}</span> <span class="text-white/60">- ${formatted.date}</span>`;
+            
+            // Actualizar indicador de tipo
+            const indicator = document.getElementById('radarTypeIndicator');
+            if (indicator) {
+                if (isExtendedForecast) {
+                    indicator.textContent = 'Pronóstico 3 días';
+                    indicator.className = 'px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-300 text-[9px] sm:text-xs font-medium';
+                } else if (isForecast) {
+                    indicator.textContent = 'Pronóstico';
+                    indicator.className = 'px-2 py-0.5 rounded-full bg-green-500/30 text-green-300 text-[9px] sm:text-xs font-medium';
+                } else {
+                    indicator.textContent = 'Histórico';
+                    indicator.className = 'px-2 py-0.5 rounded-full bg-gray-500/30 text-gray-300 text-[9px] sm:text-xs font-medium';
+                }
+            }
+            
+            // Actualizar barra de progreso
+            const progressBar = document.getElementById('radarProgressBar');
+            const progressText = document.getElementById('radarProgressText');
+            if (progressBar && progressText && radarFrames.length > 0) {
+                const progress = ((frameIndex + 1) / radarFrames.length) * 100;
+                progressBar.style.width = `${progress}%`;
+                progressText.textContent = `${Math.round(progress)}%`;
+            }
         }
 
         function showRadarFrame(position) {
@@ -1233,9 +1427,9 @@
 
             if (radarLayerCache[position]) {
                 if (oldLayer) {
-                    oldLayer.setOpacity(0);
+                    setLayerOpacity(oldLayer, 0);
                 }
-                radarLayerCache[position].setOpacity(radarOpacity);
+                setLayerOpacity(radarLayerCache[position], radarOpacity);
                 radarCurrentLayer = radarLayerCache[position];
                 radarAnimationPosition = position;
 
@@ -1249,10 +1443,11 @@
 
             var newLayer = createRadarLayer(frame);
 
-            newLayer.on('load', function() {
-                newLayer.setOpacity(radarOpacity);
+            // Manejar tanto capas individuales como grupos de capas
+            const handleLayerLoad = () => {
+                setLayerOpacity(newLayer, radarOpacity);
                 if (oldLayer) {
-                    oldLayer.setOpacity(0);
+                    setLayerOpacity(oldLayer, 0);
                 }
                 radarLayerCache[position] = newLayer;
                 radarCurrentLayer = newLayer;
@@ -1262,9 +1457,36 @@
                 if (isRadarPlaying) {
                     radarAnimationTimer = setTimeout(playRadarAnimation, radarAnimationDelay);
                 }
-            });
+            };
+
+            if (frame.isOpenWeather) {
+                // Para capas de OpenWeather, simular carga inmediata
+                setTimeout(handleLayerLoad, 300);
+            } else {
+                // Para capas de RainViewer, esperar al evento load
+                newLayer.on('load', handleLayerLoad);
+            }
 
             newLayer.addTo(radarMap);
+        }
+
+        // Helper para establecer opacidad en capas individuales o grupos
+        function setLayerOpacity(layer, opacity) {
+            if (!layer) return;
+            
+            if (layer.setOpacity) {
+                // Capa individual
+                layer.setOpacity(opacity);
+            } else if (layer.eachLayer) {
+                // Grupo de capas
+                layer.eachLayer(sublayer => {
+                    if (sublayer.setOpacity) {
+                        sublayer.setOpacity(opacity);
+                    } else if (sublayer.setStyle) {
+                        sublayer.setStyle({ opacity: opacity, fillOpacity: opacity * 0.5 });
+                    }
+                });
+            }
         }
 
         function stopRadarAnimation() {
@@ -1283,7 +1505,20 @@
         function playRadarAnimation() {
             isRadarPlaying = true;
             document.getElementById("radarPlayBtn").innerHTML = '<i class="fas fa-pause text-xs sm:text-sm"></i>';
-            showRadarFrame(radarAnimationPosition + 1);
+            
+            // Verificar si llegamos al final de todos los frames
+            const nextPosition = radarAnimationPosition + 1;
+            if (nextPosition >= radarFrames.length) {
+                // Llegamos al final, detener la animación
+                stopRadarAnimation();
+                // Opcional: volver al inicio después de un momento
+                setTimeout(() => {
+                    showRadarFrame(0);
+                }, 1000);
+                return;
+            }
+            
+            showRadarFrame(nextPosition);
         }
 
         function toggleRadarAnimation() {
