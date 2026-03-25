@@ -371,6 +371,79 @@
                 </div>
             </div>
 
+            <!-- Radar meteorológico -->
+            <div class="glass rounded-2xl sm:rounded-3xl p-3 sm:p-6 mb-6 sm:mb-8 glow">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-3 sm:mb-6">
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-red-500/20 flex items-center justify-center">
+                            <i class="fas fa-satellite-dish text-red-400 text-sm sm:text-base animate-pulse"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-white font-semibold text-sm sm:text-lg">Radar Meteorológico</h3>
+                            <p class="text-white/50 text-[10px] sm:text-sm">Precipitación en tiempo real - <a href="https://rainviewer.com" target="_blank" class="text-red-400 hover:underline">RainViewer</a></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 sm:gap-3">
+                        <button id="radarPlayBtn" onclick="toggleRadarAnimation()" class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-all duration-300 border border-red-500/30 flex items-center justify-center">
+                            <i class="fas fa-play text-xs sm:text-sm"></i>
+                        </button>
+                        <button id="radarRefreshBtn" onclick="refreshRadar()" class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-all duration-300 border border-blue-500/30 flex items-center justify-center">
+                            <i class="fas fa-sync-alt text-xs sm:text-sm"></i>
+                        </button>
+                        <button id="radarResetBtn" onclick="resetRadarView()" class="hidden sm:flex w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gray-500/20 hover:bg-gray-500/30 text-gray-400 transition-all duration-300 border border-gray-500/30 items-center justify-center">
+                            <i class="fas fa-home text-xs sm:text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Controles del radar -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 mb-3 sm:mb-4 text-white/60 text-[10px] sm:text-sm">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-clock text-red-400"></i>
+                        <span id="radarTimestamp">Cargando...</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-tint text-blue-400"></i>
+                        <span class="hidden sm:inline">Intensidad de precipitación</span>
+                        <span class="sm:hidden">Precipitación</span>
+                    </div>
+                </div>
+
+                <!-- Mapa del radar -->
+                <div id="radarMap" class="w-full h-48 sm:h-64 lg:h-80 rounded-xl sm:rounded-2xl overflow-hidden relative bg-black/20">
+                    <div id="radarLoading" class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-xl sm:rounded-2xl z-10">
+                        <div class="text-center">
+                            <div class="loading-spinner mb-2 sm:mb-3"></div>
+                            <p class="text-white/70 text-[10px] sm:text-sm">Cargando radar...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leyenda -->
+                <div class="flex flex-wrap items-center justify-center gap-2 sm:gap-4 mt-3 sm:mt-4 text-[10px] sm:text-xs">
+                    <div class="flex items-center gap-1">
+                        <div class="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-blue-300"></div>
+                        <span class="text-white/60 hidden sm:inline">Lluvia ligera</span>
+                        <span class="text-white/60 sm:hidden">Ligera</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-yellow-400"></div>
+                        <span class="text-white/60 hidden sm:inline">Moderada</span>
+                        <span class="text-white/60 sm:hidden">Mod.</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-orange-500"></div>
+                        <span class="text-white/60 hidden sm:inline">Fuerte</span>
+                        <span class="text-white/60 sm:hidden">Fuerte</span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <div class="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-red-600"></div>
+                        <span class="text-white/60 hidden sm:inline">Tormenta</span>
+                        <span class="text-white/60 sm:hidden">Tor.</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Pronóstico 3 días -->
             <div class="glass rounded-2xl sm:rounded-3xl p-4 sm:p-6 glow">
                 <div class="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
@@ -407,11 +480,37 @@
         let isUsingGPS = false;
 
         // ============================================
+        // VARIABLES DEL RADAR
+        // ============================================
+        let radarMap = null;
+        let radarApiData = {};
+        let radarFrames = [];
+        let radarAnimationPosition = 0;
+        let radarAnimationTimer = false;
+        let radarCurrentLayer = null;
+        let radarIsLoading = false;
+        let radarLayerCache = {};
+        let radarTileSize = window.devicePixelRatio >= 2 ? 512 : 256;
+        let radarOpacity = 0.8;
+        let radarAnimationDelay = 800;
+        let radarApiUrl = "https://api.rainviewer.com/public/weather-maps.json";
+        
+        // Límites geográficos de Argentina para restringir el mapa
+        const ARGENTINA_BOUNDS = [
+            [-55.0, -75.0], // Suroeste
+            [-21.0, -53.0]  // Noreste
+        ];
+        
+        // Centro de Argentina
+        const ARGENTINA_CENTER = [-38.0, -64.0];
+
+        // ============================================
         // INICIALIZACIÓN
         // ============================================
         document.addEventListener('DOMContentLoaded', () => {
             updateCurrentDate();
             loadWeatherData();
+            initRadar();
             
             // Intentar obtener ubicación GPS automáticamente al cargar
             if (navigator.geolocation) {
@@ -738,6 +837,9 @@
             // Centrar mapa en la ubicación del GPS
             map.setView([lat, lon], 15);
 
+            // También actualizar el mapa del radar
+            updateRadarLocation(lat, lon);
+
             // Eliminar marcador de usuario anterior si existe
             if (userMarker) {
                 map.removeLayer(userMarker);
@@ -909,6 +1011,265 @@
             const directions = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
             const index = Math.round(deg / 22.5) % 16;
             return `${directions[index]} (${deg}°)`;
+        }
+
+        // ============================================
+        // RADAR METEOROLÓGICO - RAINVIEWER
+        // ============================================
+        function initRadar() {
+            if (radarMap) {
+                radarMap.remove();
+            }
+
+            // Determinar vista inicial según si tenemos GPS o no
+            const initialCenter = isUsingGPS ? [currentLat, currentLon] : ARGENTINA_CENTER;
+            const initialZoom = isUsingGPS ? 8 : 4; // Zoom más cercano si tenemos GPS
+
+            radarMap = L.map('radarMap', {
+                center: initialCenter,
+                zoom: initialZoom,
+                zoomControl: true,
+                attributionControl: false,
+                maxBounds: ARGENTINA_BOUNDS,
+                maxBoundsViscosity: 1.0, // No permitir arrastrar fuera de los límites
+                minZoom: 3, // Zoom mínimo para ver toda Argentina
+                maxZoom: 12 // Zoom máximo para vista detallada
+            });
+
+            // Mejorar controles para móvil
+            if (window.innerWidth <= 768) {
+                radarMap.zoomControl.setPosition('bottomright');
+            }
+
+            // Capa base de OpenStreetMap para el radar
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '',
+                maxZoom: 12,
+                bounds: ARGENTINA_BOUNDS
+            }).addTo(radarMap);
+
+            // Cargar datos del radar
+            loadRadarData();
+        }
+
+        function loadRadarData() {
+            const apiRequest = new XMLHttpRequest();
+            apiRequest.open("GET", radarApiUrl, true);
+            apiRequest.onload = function() {
+                try {
+                    radarApiData = JSON.parse(apiRequest.response);
+                    initializeRadar();
+                } catch (error) {
+                    console.error('Error al cargar datos del radar:', error);
+                    document.getElementById('radarLoading').innerHTML = `
+                        <div class="text-center">
+                            <i class="fas fa-exclamation-triangle text-red-400 text-2xl mb-2"></i>
+                            <p class="text-white/70 text-sm">No se pudo cargar el radar</p>
+                        </div>
+                    `;
+                }
+            };
+            apiRequest.onerror = function() {
+                document.getElementById('radarLoading').innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-exclamation-triangle text-red-400 text-2xl mb-2"></i>
+                        <p class="text-white/70 text-sm">Error de conexión</p>
+                    </div>
+                `;
+            };
+            apiRequest.send();
+        }
+
+        function initializeRadar() {
+            clearRadarLayerCache();
+            radarCurrentLayer = null;
+            radarFrames = [];
+            radarAnimationPosition = 0;
+
+            if (!radarApiData || !radarApiData.radar || !radarApiData.radar.past) {
+                document.getElementById('radarLoading').innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-info-circle text-blue-400 text-2xl mb-2"></i>
+                        <p class="text-white/70 text-sm">No hay datos de radar disponibles</p>
+                    </div>
+                `;
+                return;
+            }
+
+            radarFrames = radarApiData.radar.past;
+            showRadarFrame(radarFrames.length - 1);
+            
+            // Ocultar loading
+            document.getElementById('radarLoading').classList.add('hidden');
+        }
+
+        function createRadarLayer(frame) {
+            return new L.TileLayer(radarApiData.host + frame.path + '/' + radarTileSize + '/{z}/{x}/{y}/2/1_1.png', {
+                tileSize: 256,
+                opacity: 0.001,
+                maxNativeZoom: 7,
+                maxZoom: 12
+            });
+        }
+
+        function clearRadarLayerCache() {
+            stopRadarAnimation();
+            for (var pos in radarLayerCache) {
+                if (parseInt(pos) !== radarAnimationPosition) {
+                    radarMap.removeLayer(radarLayerCache[pos]);
+                    delete radarLayerCache[pos];
+                }
+            }
+        }
+
+        function wrapRadarPosition(position) {
+            while (position >= radarFrames.length) {
+                position -= radarFrames.length;
+            }
+            while (position < 0) {
+                position += radarFrames.length;
+            }
+            return position;
+        }
+
+        function formatRadarTime(timestamp) {
+            return new Date(timestamp * 1000).toLocaleTimeString('es-AR', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        function updateRadarTimestamp(frame) {
+            document.getElementById('radarTimestamp').textContent = formatRadarTime(frame.time);
+        }
+
+        function showRadarFrame(position) {
+            if (radarIsLoading) return;
+
+            position = wrapRadarPosition(position);
+            var frame = radarFrames[position];
+
+            updateRadarTimestamp(frame);
+
+            var oldLayer = radarCurrentLayer;
+
+            if (radarLayerCache[position]) {
+                if (oldLayer) {
+                    oldLayer.setOpacity(0);
+                }
+                radarLayerCache[position].setOpacity(radarOpacity);
+                radarCurrentLayer = radarLayerCache[position];
+                radarAnimationPosition = position;
+
+                if (radarAnimationTimer) {
+                    radarAnimationTimer = setTimeout(playRadarAnimation, radarAnimationDelay);
+                }
+                return;
+            }
+
+            radarIsLoading = true;
+
+            var newLayer = createRadarLayer(frame);
+
+            newLayer.on('load', function() {
+                newLayer.setOpacity(radarOpacity);
+                if (oldLayer) {
+                    oldLayer.setOpacity(0);
+                }
+                radarLayerCache[position] = newLayer;
+                radarCurrentLayer = newLayer;
+                radarAnimationPosition = position;
+                radarIsLoading = false;
+
+                if (radarAnimationTimer) {
+                    radarAnimationTimer = setTimeout(playRadarAnimation, radarAnimationDelay);
+                }
+            });
+
+            newLayer.addTo(radarMap);
+        }
+
+        function stopRadarAnimation() {
+            if (radarAnimationTimer) {
+                clearTimeout(radarAnimationTimer);
+                radarAnimationTimer = false;
+                document.getElementById("radarPlayBtn").innerHTML = '<i class="fas fa-play text-xs sm:text-sm"></i>';
+                return true;
+            }
+            return false;
+        }
+
+        function playRadarAnimation() {
+            radarAnimationTimer = true;
+            document.getElementById("radarPlayBtn").innerHTML = '<i class="fas fa-pause text-xs sm:text-sm"></i>';
+            showRadarFrame(radarAnimationPosition + 1);
+        }
+
+        function toggleRadarAnimation() {
+            if (!stopRadarAnimation()) {
+                playRadarAnimation();
+            }
+        }
+
+        function refreshRadar() {
+            const btn = document.getElementById('radarRefreshBtn');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin text-xs sm:text-sm"></i>';
+            
+            // Mostrar loading
+            document.getElementById('radarLoading').classList.remove('hidden');
+            document.getElementById('radarLoading').innerHTML = `
+                <div class="text-center">
+                    <div class="loading-spinner mb-3"></div>
+                    <p class="text-white/70 text-sm">Actualizando radar...</p>
+                </div>
+            `;
+            
+            // Limpiar y recargar
+            clearRadarLayerCache();
+            loadRadarData();
+            
+            // Restaurar botón después de 2 segundos
+            setTimeout(() => {
+                btn.innerHTML = '<i class="fas fa-sync-alt text-xs sm:text-sm"></i>';
+            }, 2000);
+        }
+
+        // Actualizar radar cuando cambia la ubicación GPS
+        function updateRadarLocation(lat, lon) {
+            if (radarMap) {
+                // Centrar en la ubicación GPS con zoom apropiado
+                radarMap.setView([lat, lon], 8);
+                
+                // Actualizar variable para indicar que estamos usando GPS
+                isUsingGPS = true;
+            }
+        }
+
+        // Re-inicializar radar cuando cambia el tamaño de la ventana
+        window.addEventListener('resize', () => {
+            if (radarMap) {
+                radarMap.invalidateSize();
+                
+                // Ajustar posición de controles según el tamaño
+                if (window.innerWidth <= 768) {
+                    radarMap.zoomControl.setPosition('bottomright');
+                } else {
+                    radarMap.zoomControl.setPosition('topleft');
+                }
+            }
+        });
+
+        // Función para resetear la vista del radar
+        function resetRadarView() {
+            if (radarMap) {
+                if (isUsingGPS && currentLat && currentLon) {
+                    // Si tenemos GPS, centrar en la ubicación actual
+                    radarMap.setView([currentLat, currentLon], 8);
+                } else {
+                    // Si no, centrar en Argentina
+                    radarMap.setView(ARGENTINA_CENTER, 4);
+                }
+            }
         }
     </script>
 </body>
