@@ -945,10 +945,17 @@
                 zoomControl: true,
             });
 
-            // Capa de OpenStreetMap
+            // Capa de OpenStreetMap con etiquetas en español
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
                 maxZoom: 19,
+            }).addTo(map);
+            
+            // Agregar capa de etiquetas personalizadas para mostrar nombres correctos
+            L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+                attribution: '',
+                maxZoom: 19,
+                opacity: 0.7
             }).addTo(map);
 
             // Marcador personalizado
@@ -1091,6 +1098,36 @@
                 attribution: '',
                 maxZoom: 12,
                 bounds: ARGENTINA_BOUNDS
+            }).addTo(radarMap);
+            
+            // Agregar marcador personalizado para Islas Malvinas
+            const malvinasMarker = L.marker([-51.7, -59.5], {
+                icon: L.divIcon({
+                    className: 'malvinas-label',
+                    html: '<div style="background: rgba(0,0,0,0.8); color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; white-space: nowrap;">Islas Malvinas</div>',
+                    iconSize: [100, 20],
+                    iconAnchor: [50, 10]
+                })
+            }).addTo(radarMap);
+            
+            // Agregar marcador para las Georgias del Sur
+            const georgiasMarker = L.marker([-54.5, -36.5], {
+                icon: L.divIcon({
+                    className: 'georgias-label',
+                    html: '<div style="background: rgba(0,0,0,0.8); color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; white-space: nowrap;">Islas Georgias del Sur</div>',
+                    iconSize: [120, 20],
+                    iconAnchor: [60, 10]
+                })
+            }).addTo(radarMap);
+            
+            // Agregar marcador para las Sandwich del Sur
+            const sandwichMarker = L.marker([-59.5, -27.0], {
+                icon: L.divIcon({
+                    className: 'sandwich-label',
+                    html: '<div style="background: rgba(0,0,0,0.8); color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: bold; white-space: nowrap;">Islas Sandwich del Sur</div>',
+                    iconSize: [130, 20],
+                    iconAnchor: [65, 10]
+                })
             }).addTo(radarMap);
 
             // Cargar datos del radar
