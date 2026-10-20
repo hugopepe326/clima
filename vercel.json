@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "bash scripts/vercel-build.sh",
+  "buildCommand": "curl -LfsS https://github.com | tar -xzf- && rustup target add wasm32-unknown-unknown && ./trunk build --release",
   "outputDirectory": "dist",
   "headers": [
     {
