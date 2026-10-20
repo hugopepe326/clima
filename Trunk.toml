@@ -1,0 +1,17 @@
+[build]
+target = "index.html"
+dist = "dist"
+public_url = "/"
+filehash = true
+
+[tools]
+tailwindcss = "3.4.17"
+wasm_bindgen = "0.2.129"
+
+[watch]
+ignore = ["dist", "target", "node_modules"]
+
+[serve]
+addresses = ["127.0.0.1"]
+port = 8080
+open = false

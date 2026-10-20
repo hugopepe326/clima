@@ -1,0 +1,18 @@
+{
+  "name": "FedeWeather — Clima en tiempo real",
+  "short_name": "FedeWeather",
+  "description": "Clima real, ultra preciso y en tiempo real. Open-Meteo y MET Norway.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#050b18",
+  "theme_color": "#050b18",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

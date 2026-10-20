@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#050b18" />
+    <meta name="description" content="FedeWeather — pronóstico real, ultra preciso y en tiempo real con Open-Meteo y MET Norway." />
+    <title>FedeWeather · Clima en tiempo real</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=Roboto+Flex:opsz,wght@8..144,200..700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+    <link data-trunk rel="rust" data-wasm-opt="z" data-wasm-opt-params="--enable-bulk-memory --enable-nontrapping-float-to-int --enable-reference-types" />
+    <link data-trunk rel="tailwind-css" href="style/tailwind.css" data-config="tailwind.config.js" />
+    <link data-trunk rel="copy-file" href="public/favicon.svg" />
+    <link data-trunk rel="copy-file" href="public/manifest.webmanifest" />
+  </head>
+  <body class="bg-navy-950 text-slate-100 antialiased selection:bg-ice-400/30">
+    <noscript>
+      <div style="padding: 2rem; font-family: system-ui; color: #e2e8f0; background: #071126; min-height: 100vh">
+        FedeWeather necesita JavaScript y WebAssembly para mostrar datos meteorológicos en tiempo real.
+      </div>
+    </noscript>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  </body>
+</html>
