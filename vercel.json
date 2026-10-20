@@ -1,5 +1,5 @@
 {
   "framework": null,
-  "buildCommand": "curl -LfsS https://trunk.rs | sh && rustup target add wasm32-unknown-unknown && root/.cargo/bin/trunk build --release",
+  "buildCommand": "curl -LfsS https://trunk.rs | sh && rustup target add wasm32-unknown-unknown && $HOME/.trunk/bin/trunk build --release",
   "outputDirectory": "dist"
 }
